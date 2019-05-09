@@ -30,14 +30,14 @@ defmodule Download do
 
   @default_max_file_size 1024 * 1024 * 1000 # 1 GB
 
-  def from(url, opts \\ []) do
+  def from(url, opts \\ [], poison_opts \\ []) do
     max_file_size = Keyword.get(opts, :max_file_size, @default_max_file_size)
     file_name = url |> String.split("/") |> List.last()
     path = Keyword.get(opts, :path, get_default_download_path(file_name))
 
     with  { :ok, file } <- create_file(path),
           { :ok, response_parsing_pid } <- create_process(file, max_file_size, path),
-          { :ok, _pid } <- start_download(url, response_parsing_pid, path),
+          { :ok, _pid } <- start_download(url, poison_opts, response_parsing_pid, path),
           { :ok } <- wait_for_download(),
         do: { :ok, path }
   end
@@ -58,8 +58,9 @@ defmodule Download do
     { :ok, spawn_link(__MODULE__, :do_download, [opts]) }
   end
 
-  defp start_download(url, response_parsing_pid, path) do
-    request = HTTPoison.get url, %{}, stream_to: response_parsing_pid
+  defp start_download(url, poison_opts, response_parsing_pid, path) do
+    opts = poison_opts |> Keyword.put(:stream_to, response_parsing_pid)
+    request = HTTPoison.get url, %{}, opts
 
     case request do
       { :error, _reason } ->
